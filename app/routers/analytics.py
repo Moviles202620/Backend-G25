@@ -4,7 +4,7 @@ from sqlalchemy.orm import Session
 from app.core.dependencies import get_db
 from app.models.offer import Offer
 from app.models.application import Application
-from app.schemas.analytics import OfferAcceptanceRateOut, OverallInsightsOut, GpaByOfferOut, TopApplicantOut, GpaHighRateOut, ApplicationsPerSemesterOut, StatusDistributionOut
+from app.schemas.analytics import OfferAcceptanceRateOut, OverallInsightsOut, GpaByOfferOut, TopApplicantOut, GpaHighRateOut, ApplicationsPerSemesterOut, OfferLifecycleOut, StatusDistributionOut
 from app.services.analytics_service import (
     get_acceptance_rate_by_offer,
     get_overall_insights,
@@ -59,6 +59,33 @@ def time_to_first_application(db: Session = Depends(get_db)):
         "offers_with_applications": offers_with_apps,
         "total_offers": len(offers),
     }
+
+
+@router.get("/offer-lifecycle", response_model=OfferLifecycleOut)
+def offer_lifecycle(db: Session = Depends(get_db)):
+    """BQ11 (Santiago Reyes): Offer lifecycle duration statistics.
+
+    Queries closed offers (closed_at IS NOT NULL), computes (closed_at - created_at).days
+    for each, and returns average, min, max days and total count.
+    """
+    offers = db.query(Offer).filter(Offer.closed_at.isnot(None)).all()
+
+    if not offers:
+        return OfferLifecycleOut(average_days=0.0, min_days=0, max_days=0, total_offers=0)
+
+    durations = []
+    for offer in offers:
+        closed = offer.closed_at.replace(tzinfo=None)
+        created = offer.created_at.replace(tzinfo=None)
+        days = abs((closed - created).days)
+        durations.append(days)
+
+    return OfferLifecycleOut(
+        average_days=round(sum(durations) / len(durations), 2),
+        min_days=min(durations),
+        max_days=max(durations),
+        total_offers=len(durations),
+    )
 
 
 @router.get("/acceptance-rate", response_model=list[OfferAcceptanceRateOut])
