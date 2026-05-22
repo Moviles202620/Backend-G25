@@ -4,7 +4,7 @@ from sqlalchemy.orm import Session
 from app.core.dependencies import get_db
 from app.models.offer import Offer
 from app.models.application import Application
-from app.schemas.analytics import OfferAcceptanceRateOut, OverallInsightsOut, GpaByOfferOut, TopApplicantOut, GpaHighRateOut, ApplicationsPerSemesterOut, OfferLifecycleOut
+from app.schemas.analytics import OfferAcceptanceRateOut, OverallInsightsOut, GpaByOfferOut, TopApplicantOut, GpaHighRateOut, ApplicationsPerSemesterOut, OfferLifecycleOut, StatusDistributionOut
 from app.services.analytics_service import (
     get_acceptance_rate_by_offer,
     get_overall_insights,
@@ -12,6 +12,7 @@ from app.services.analytics_service import (
     get_top_applicants,
     get_gpa_high_rate,
     get_applications_per_semester,
+    get_status_distribution,
 )
 
 router = APIRouter(prefix="/analytics", tags=["analytics"])
@@ -141,3 +142,16 @@ def applications_per_semester(db: Session = Depends(get_db)):
     Helps the institution understand engagement patterns across academic stages.
     """
     return get_applications_per_semester(db)
+
+
+@router.get("/status-distribution", response_model=StatusDistributionOut)
+def status_distribution(
+    semester: str | None = Query(default=None),
+    db: Session = Depends(get_db),
+):
+    """
+    BQ13 (David Hernandez) – Distribution of application statuses this semester.
+    Returns pending/accepted/rejected counts + percentages (global + per-offer breakdown).
+    Pass ?semester=2026-1 to query a specific academic semester; omit for current one.
+    """
+    return get_status_distribution(db, semester)

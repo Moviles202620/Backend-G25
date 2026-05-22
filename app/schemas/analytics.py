@@ -98,3 +98,36 @@ class OfferLifecycleOut(BaseModel):
     min_days: int
     max_days: int
     total_offers: int
+
+
+# ── BQ13: Status Distribution ─────────────────────────────────────────────────
+
+class StatusCountOut(BaseModel):
+    """One status bucket (pending | accepted | rejected) with count and percentage."""
+    status: str
+    count: int
+    percentage: float
+
+
+class OfferStatusBreakdownOut(BaseModel):
+    """Per-offer breakdown of application statuses for BQ13."""
+    offer_id: int
+    offer_title: str
+    category: Optional[str]
+    pending: int
+    accepted: int
+    rejected: int
+    total: int
+
+
+class StatusDistributionOut(BaseModel):
+    """
+    BQ13: Distribution of application statuses across all offers this semester.
+    Functional scenario: Staff opens analytics -> system aggregates pending/accepted/rejected
+    counts for the current academic semester -> shows donut chart + per-offer breakdown.
+    Quality scenario (Performance): Response time < 2 s for up to 500 applications.
+    """
+    semester: str
+    total_applications: int
+    distribution: list[StatusCountOut]
+    per_offer: list[OfferStatusBreakdownOut]
