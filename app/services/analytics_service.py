@@ -1,3 +1,4 @@
+from datetime import datetime
 from sqlalchemy.orm import Session
 from sqlalchemy import func as sql_func
 
@@ -196,6 +197,114 @@ def get_applications_per_semester(db: Session) -> list[dict]:
             "avg_applications_per_student": avg,
         })
     return results
+
+
+def _semester_range(semester: str | None) -> tuple[str, datetime, datetime]:
+    """
+    BQ13 helper – compute the academic semester label and its [start, end) range.
+
+    Uniandes academic calendar:
+      Semester 1: January 1 – June 30  (months 1-6)
+      Semester 2: July 1 – December 31 (months 7-12)
+
+    Args:
+        semester: None (use server date) or a string like "2026-1" / "2026-2".
+
+    Returns:
+        (label, start_datetime, end_datetime) where the range is [start, end).
+    """
+    if semester is None:
+        now = datetime.now()
+        year = now.year
+        sem = 1 if now.month <= 6 else 2
+    else:
+        try:
+            parts = semester.split("-")
+            year = int(parts[0])
+            sem = int(parts[1])
+        except (IndexError, ValueError):
+            now = datetime.now()
+            year = now.year
+            sem = 1 if now.month <= 6 else 2
+
+    label = f"{year}-{sem}"
+    if sem == 1:
+        start = datetime(year, 1, 1)
+        end = datetime(year, 7, 1)
+    else:
+        start = datetime(year, 7, 1)
+        end = datetime(year + 1, 1, 1)
+
+    return label, start, end
+
+
+def get_status_distribution(db: Session, semester: str | None = None) -> dict:
+    """
+    BQ13 (David Hernandez) – Distribution of application statuses this semester.
+
+    Functional scenario: Staff opens analytics -> system aggregates pending/accepted/rejected
+    counts for the current academic semester -> returns donut chart data + per-offer breakdown.
+    Quality scenario (Performance): Response time < 2 s for up to 500 applications.
+    """
+    label, start, end = _semester_range(semester)
+
+    # ── All applications in the semester window ───────────────────────────────
+    apps = (
+        db.query(Application)
+        .join(Offer, Offer.id == Application.offer_id)
+        .filter(Application.created_at >= start, Application.created_at < end)
+        .all()
+    )
+
+    total = len(apps)
+
+    # ── Global distribution ───────────────────────────────────────────────────
+    counts: dict[str, int] = {"pending": 0, "accepted": 0, "rejected": 0}
+    for app in apps:
+        counts[app.status.value] += 1
+
+    distribution = []
+    for status_name in ("pending", "accepted", "rejected"):
+        cnt = counts[status_name]
+        pct = round((cnt / total) * 100, 1) if total > 0 else 0.0
+        distribution.append({"status": status_name, "count": cnt, "percentage": pct})
+
+    # ── Per-offer breakdown ───────────────────────────────────────────────────
+    offer_buckets: dict[int, dict] = {}
+    for app in apps:
+        oid = app.offer_id
+        if oid not in offer_buckets:
+            offer_buckets[oid] = {
+                "offer_id": oid,
+                "offer_title": app.offer_title or "",
+                "category": None,
+                "pending": 0,
+                "accepted": 0,
+                "rejected": 0,
+                "total": 0,
+            }
+        offer_buckets[oid][app.status.value] += 1
+        offer_buckets[oid]["total"] += 1
+
+    # Enrich with category from Offer table
+    if offer_buckets:
+        offer_rows = (
+            db.query(Offer.id, Offer.category)
+            .filter(Offer.id.in_(list(offer_buckets.keys())))
+            .all()
+        )
+        for row in offer_rows:
+            if row.id in offer_buckets:
+                offer_buckets[row.id]["category"] = row.category
+
+    per_offer = sorted(offer_buckets.values(), key=lambda x: x["total"], reverse=True)
+
+    return {
+        "semester": label,
+        "total_applications": total,
+        "distribution": distribution,
+        "per_offer": per_offer,
+    }
 
 
 def get_overall_insights(db: Session) -> dict:
