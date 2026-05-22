@@ -85,3 +85,16 @@ class ApplicationsPerSemesterOut(BaseModel):
     total_applications: int
     unique_students: int
     avg_applications_per_student: float
+
+
+class OfferLifecycleOut(BaseModel):
+    """
+    BQ11 (Santiago Reyes): Offer lifecycle duration statistics.
+    Functional scenario: Staff opens analytics -> system queries closed offers,
+    computes (closed_at - created_at).days for each, returns aggregate stats.
+    Quality scenario (Performance): Response time < 2 s for up to 500 offers.
+    """
+    average_days: float
+    min_days: int
+    max_days: int
+    total_offers: int
