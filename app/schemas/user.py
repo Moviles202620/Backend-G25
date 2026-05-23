@@ -16,8 +16,12 @@ class UserOut(BaseModel):
     role: str
     language: str
     is_dark_mode: bool
-    # Sprint 4: Caching — carnet image URL
+    # Isabella — Sprint 3: Coil — carnet image URL
     profile_picture: Optional[str] = None
+    # Isabella — Sprint 4: PaymentDocuments — RUT document URL
+    rut_url: Optional[str] = None
+    # Isabella — Sprint 4: PaymentDocuments — cedula document URL
+    cedula_url: Optional[str] = None
 
     class Config:
         from_attributes = True
