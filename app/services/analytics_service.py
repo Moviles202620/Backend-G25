@@ -1,9 +1,10 @@
-from datetime import datetime
+from datetime import datetime, timedelta
 from sqlalchemy.orm import Session
 from sqlalchemy import func as sql_func
 
 from app.models.offer import Offer
 from app.models.application import Application, ApplicationStatus
+from app.models.user import User
 from collections import defaultdict
 
 
@@ -305,6 +306,67 @@ def get_status_distribution(db: Session, semester: str | None = None) -> dict:
         "distribution": distribution,
         "per_offer": per_offer,
     }
+
+
+def get_staff_activity(db: Session, days: int = 30) -> list[dict]:
+    """
+    BQ17 (Guillermo Hernández) – Staff ranked by offer-creation rate in the last N days.
+
+    Functional scenario: Staff opens the analytics leaderboard -> system counts offers
+    created by each staff member within the last `days` days -> returns a ranked list
+    so administrators can identify the most active offer publishers.
+    Quality scenario (Performance): Response time < 2 s for up to 100 staff members.
+
+    Algorithm:
+      1. Load all users with role='staff'.
+      2. Run two aggregation queries (recent window + all-time) using `.in_()` for
+         bulk lookup — avoids N+1 queries.
+      3. Merge into a ranked list sorted by offers_in_window descending.
+    """
+    staff = db.query(User).filter(User.role == "staff").all()
+    if not staff:
+        return []
+
+    staff_ids = [s.id for s in staff]
+
+    # Count offers created within the window
+    cutoff = datetime.now() - timedelta(days=days)
+    recent_rows = (
+        db.query(
+            Offer.staff_id,
+            sql_func.count(Offer.id).label("cnt"),
+        )
+        .filter(Offer.staff_id.in_(staff_ids), Offer.created_at >= cutoff)
+        .group_by(Offer.staff_id)
+        .all()
+    )
+    recent_map: dict[int, int] = {r.staff_id: r.cnt for r in recent_rows}
+
+    # Count all-time offers per staff
+    total_rows = (
+        db.query(
+            Offer.staff_id,
+            sql_func.count(Offer.id).label("cnt"),
+        )
+        .filter(Offer.staff_id.in_(staff_ids))
+        .group_by(Offer.staff_id)
+        .all()
+    )
+    total_map: dict[int, int] = {r.staff_id: r.cnt for r in total_rows}
+
+    results = [
+        {
+            "staff_id": s.id,
+            "staff_name": s.name,
+            "department": s.department,
+            "offers_in_window": recent_map.get(s.id, 0),
+            "total_offers": total_map.get(s.id, 0),
+        }
+        for s in staff
+    ]
+
+    results.sort(key=lambda x: x["offers_in_window"], reverse=True)
+    return results
 
 
 def get_overall_insights(db: Session) -> dict:

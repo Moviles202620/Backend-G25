@@ -131,3 +131,21 @@ class StatusDistributionOut(BaseModel):
     total_applications: int
     distribution: list[StatusCountOut]
     per_offer: list[OfferStatusBreakdownOut]
+
+
+# ── BQ17: Staff Activity Leaderboard ─────────────────────────────────────────
+
+class StaffActivityOut(BaseModel):
+    """
+    BQ17 (Guillermo Hernández): Staff ranked by offer-creation rate in the last N days.
+    Functional scenario: Staff opens analytics -> system counts offers created per staff
+    member in the last N days -> returns ranked list to identify most active publishers.
+    Quality scenario (Performance): Response time < 2 s for up to 100 staff members.
+    """
+    model_config = ConfigDict(from_attributes=True)
+
+    staff_id: int
+    staff_name: str
+    department: Optional[str]
+    offers_in_window: int
+    total_offers: int

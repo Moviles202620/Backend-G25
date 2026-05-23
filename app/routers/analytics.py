@@ -4,7 +4,7 @@ from sqlalchemy.orm import Session
 from app.core.dependencies import get_db
 from app.models.offer import Offer
 from app.models.application import Application
-from app.schemas.analytics import OfferAcceptanceRateOut, OverallInsightsOut, GpaByOfferOut, TopApplicantOut, GpaHighRateOut, ApplicationsPerSemesterOut, OfferLifecycleOut, StatusDistributionOut
+from app.schemas.analytics import OfferAcceptanceRateOut, OverallInsightsOut, GpaByOfferOut, TopApplicantOut, GpaHighRateOut, ApplicationsPerSemesterOut, OfferLifecycleOut, StatusDistributionOut, StaffActivityOut
 from app.services.analytics_service import (
     get_acceptance_rate_by_offer,
     get_overall_insights,
@@ -13,6 +13,7 @@ from app.services.analytics_service import (
     get_gpa_high_rate,
     get_applications_per_semester,
     get_status_distribution,
+    get_staff_activity,
 )
 
 router = APIRouter(prefix="/analytics", tags=["analytics"])
@@ -155,3 +156,18 @@ def status_distribution(
     Pass ?semester=2026-1 to query a specific academic semester; omit for current one.
     """
     return get_status_distribution(db, semester)
+
+
+@router.get("/staff-activity", response_model=list[StaffActivityOut])
+def staff_activity(
+    days: int = Query(default=30, ge=1, le=365),
+    db: Session = Depends(get_db),
+):
+    """
+    BQ17 (Guillermo Hernández) – Staff ranked by offer-creation rate in the last N days.
+    Returns all staff users sorted by number of offers created in the last `days` days.
+    Helps administrators identify which staff members are most actively publishing offers
+    and detect engagement drop-offs in the platform.
+    Pass ?days=30 (default) or any value between 1 and 365.
+    """
+    return get_staff_activity(db, days)
